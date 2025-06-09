@@ -43,8 +43,8 @@ class Program
         Directory.CreateDirectory(config.OutputDirectory);
 
         // Load processed mods
-        var processedMods = LoadProcessedMods(); 
-        
+        var processedMods = LoadProcessedMods();
+
         Console.WriteLine($"Starting from mod ID {config.StartingModId}, working backwards...");
         Console.WriteLine($"Already processed {processedMods.Count} mods");
 
@@ -81,7 +81,7 @@ class Program
                 if (modInfo == null)
                 {
                     Console.WriteLine($"Mod {currentModId} not found or inaccessible");
-                   
+
                     currentModId--;
                     consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
@@ -95,7 +95,7 @@ class Program
                 if (modFiles == null || modFiles.Length == 0)
                 {
                     Console.WriteLine($"No files found for mod {currentModId}");
-                   
+
                     currentModId--;
                     consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
@@ -110,7 +110,7 @@ class Program
                 if (downloadUrl == null)
                 {
                     Console.WriteLine($"Could not get download URL for mod {currentModId}");
-                  
+
                     currentModId--;
                     consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
@@ -122,7 +122,8 @@ class Program
 
                 // Mark as processed
                 processedMods.Add(currentModId);
-                SaveProcessedMods(processedMods); Console.WriteLine($"Successfully processed mod {currentModId}");
+                SaveProcessedMods(processedMods);
+                Console.WriteLine($"Successfully processed mod {currentModId}");
                 consecutiveErrors = 0;
                 processedCount++;
             }
@@ -231,8 +232,24 @@ class Program
             }
 
             var json = await response.Content.ReadAsStringAsync();
-            var downloadResponse = JsonSerializer.Deserialize<DownloadResponse>(json);
-            return downloadResponse?.URI;
+            var downloadResponse = JsonSerializer.Deserialize<List<DownloadResponse>>(json);
+
+            // get the first
+            if (downloadResponse == null || downloadResponse.Count == 0)
+            {
+                return null;
+            }
+
+            // Return the URI of the first download link
+            if (string.IsNullOrWhiteSpace(downloadResponse[0].URI))
+            {
+                return null;
+            }
+
+            // Return the first valid download URL
+            Console.WriteLine($"Download URL for mod {modId}, file {fileId}: {downloadResponse[0].URI}");
+            // Return the URI of the first download link
+            return downloadResponse[0].URI;
         }
         catch
         {
@@ -258,7 +275,7 @@ class Program
         Console.WriteLine($"Downloaded {zipPath}");
 
         // Extract zip file
-        var extractPath = Path.Combine(modDirectory, "extracted");
+        var extractPath = modDirectory;
         Directory.CreateDirectory(extractPath);
 
         try
@@ -322,9 +339,10 @@ class Program
     {
         try
         {
-            if (File.Exists(config.ProcessedModsFile))
+            var filePath = Path.Combine(config.OutputDirectory, config.ProcessedModsFile);
+            if (File.Exists(filePath))
             {
-                var json = File.ReadAllText(config.ProcessedModsFile);
+                var json = File.ReadAllText(filePath);
                 var processedIds = JsonSerializer.Deserialize<int[]>(json);
                 return new HashSet<int>(processedIds ?? Array.Empty<int>());
             }
@@ -342,7 +360,8 @@ class Program
         try
         {
             var json = JsonSerializer.Serialize(processedMods.ToArray(), new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(config.ProcessedModsFile, json);
+            var filePath = Path.Combine(config.OutputDirectory, config.ProcessedModsFile);
+            File.WriteAllText(filePath, json);
         }
         catch (Exception ex)
         {
