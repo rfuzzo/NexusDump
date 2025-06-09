@@ -4,6 +4,80 @@ using System.Text.Json;
 
 namespace NexusDump;
 
+// Colored logger for better user experience
+public static class ColoredLogger
+{
+    public static void LogInfo(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.White;
+        Console.WriteLine($"ℹ️  {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogSuccess(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"✅ {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogWarning(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine($"⚠️  {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogError(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"❌ {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogDebug(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Gray;
+        Console.WriteLine($"🐛 {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogProgress(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"🔄 {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogDownload(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Magenta;
+        Console.WriteLine($"⬇️  {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogApiLimit(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.Blue;
+        Console.WriteLine($"📊 {message}");
+        Console.ResetColor();
+    }
+
+    public static void LogHeader(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.White;
+        Console.WriteLine(message);
+        Console.ResetColor();
+    }
+
+    public static void LogRateLimit(string message)
+    {
+        Console.ForegroundColor = ConsoleColor.DarkYellow;
+        Console.WriteLine($"⏱️  {message}");
+        Console.ResetColor();
+    }
+}
+
 class Program
 {
     private static readonly HttpClient httpClient = new();
@@ -13,27 +87,29 @@ class Program
 
     static async Task Main(string[] args)
     {
-        Console.WriteLine("NexusMods Cyberpunk 2077 Mod Downloader");
-        Console.WriteLine("=======================================");        // Load configuration
+        ColoredLogger.LogHeader("NexusMods Cyberpunk 2077 Mod Downloader");
+        ColoredLogger.LogHeader("=======================================");
+
+        // Load configuration
         config = LoadConfig();
 
         // Get API key from file or user input
-        string? apiKey = LoadApiKey();
-
-        if (string.IsNullOrWhiteSpace(apiKey))
+        string? apiKey = LoadApiKey(); if (string.IsNullOrWhiteSpace(apiKey))
         {
+            Console.ForegroundColor = ConsoleColor.White;
             Console.Write("Enter your NexusMods API key: ");
+            Console.ResetColor();
             apiKey = Console.ReadLine();
 
             if (string.IsNullOrWhiteSpace(apiKey))
             {
-                Console.WriteLine("API key is required. Exiting...");
+                ColoredLogger.LogError("API key is required. Exiting...");
                 return;
             }
         }
         else
         {
-            Console.WriteLine("API key loaded from file.");
+            ColoredLogger.LogSuccess("API key loaded from file.");
         }
 
         // Setup HTTP client
@@ -44,14 +120,12 @@ class Program
         Directory.CreateDirectory(config.OutputDirectory);
 
         // Load processed mods
-        var processedMods = LoadProcessedMods();
-
-        Console.WriteLine($"Starting from mod ID {config.StartingModId}, working backwards...");
-        Console.WriteLine($"Already processed {processedMods.Count} mods");
+        var processedMods = LoadProcessedMods(); ColoredLogger.LogInfo($"Starting from mod ID {config.StartingModId}, working backwards...");
+        ColoredLogger.LogInfo($"Already processed {processedMods.Count} mods");
 
         if (config.MaxModsToProcess > 0)
         {
-            Console.WriteLine($"Debug mode: Will process maximum {config.MaxModsToProcess} mods");
+            ColoredLogger.LogDebug($"Debug mode: Will process maximum {config.MaxModsToProcess} mods");
         }
 
         int currentModId = config.StartingModId;
@@ -60,28 +134,26 @@ class Program
 
         while (currentModId > 0 && consecutiveErrors < config.MaxConsecutiveErrors)
         {
-            // Check if we've reached the debug limit
-            if (config.MaxModsToProcess > 0 && processedCount >= config.MaxModsToProcess)
+            // Check if we've reached the debug limit            if (config.MaxModsToProcess > 0 && processedCount >= config.MaxModsToProcess)
             {
-                Console.WriteLine($"Debug limit reached: processed {processedCount} mods");
+                ColoredLogger.LogInfo($"Debug limit reached: processed {processedCount} mods");
                 break;
             }
             try
             {
                 if (processedMods.Contains(currentModId))
                 {
-                    Console.WriteLine($"Mod {currentModId} already processed, skipping...");
+                    ColoredLogger.LogDebug($"Mod {currentModId} already processed, skipping...");
                     currentModId--;
                     continue;
                 }
 
-                Console.WriteLine($"\nProcessing mod ID: {currentModId}");
+                ColoredLogger.LogProgress($"Processing mod ID: {currentModId}");
 
                 // Get mod info
-                var modInfo = await GetModInfo(currentModId);
-                if (modInfo == null)
+                var modInfo = await GetModInfo(currentModId); if (modInfo == null)
                 {
-                    Console.WriteLine($"Mod {currentModId} not found or inaccessible");
+                    ColoredLogger.LogWarning($"Mod {currentModId} not found or inaccessible");
 
                     currentModId--;
                     consecutiveErrors++;
@@ -89,28 +161,26 @@ class Program
                     continue;
                 }
 
-                Console.WriteLine($"Found mod: {modInfo.name}");
+                ColoredLogger.LogSuccess($"Found mod: {modInfo.name}");
 
                 // Get mod files
                 var modFiles = await GetModFiles(currentModId);
                 if (modFiles == null || modFiles.Length == 0)
                 {
-                    Console.WriteLine($"No files found for mod {currentModId}");
+                    ColoredLogger.LogWarning($"No files found for mod {currentModId}");
 
                     currentModId--;
                     consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
-                }
-
-                // Download first file
+                }                // Download first file
                 var firstFile = modFiles[0];
-                Console.WriteLine($"Downloading file: {firstFile.name}");
+                ColoredLogger.LogDownload($"Downloading file: {firstFile.name}");
 
                 var downloadUrl = await GetDownloadUrl(currentModId, firstFile.file_id);
                 if (downloadUrl == null)
                 {
-                    Console.WriteLine($"Could not get download URL for mod {currentModId}");
+                    ColoredLogger.LogError($"Could not get download URL for mod {currentModId}");
 
                     currentModId--;
                     consecutiveErrors++;
@@ -119,18 +189,16 @@ class Program
                 }
 
                 // Download and process the mod
-                await DownloadAndProcessMod(currentModId, downloadUrl, modInfo, firstFile);
-
-                // Mark as processed
+                await DownloadAndProcessMod(currentModId, downloadUrl, modInfo, firstFile);                // Mark as processed
                 processedMods.Add(currentModId);
                 SaveProcessedMods(processedMods);
-                Console.WriteLine($"Successfully processed mod {currentModId}");
+                ColoredLogger.LogSuccess($"Successfully processed mod {currentModId}");
                 consecutiveErrors = 0;
                 processedCount++;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error processing mod {currentModId}: {ex.Message}");
+                ColoredLogger.LogError($"Error processing mod {currentModId}: {ex.Message}");
                 consecutiveErrors++;
             }
 
@@ -139,13 +207,12 @@ class Program
             // Rate limiting
             await Task.Delay(config.RateLimitDelayMs);
         }
-
         if (consecutiveErrors >= config.MaxConsecutiveErrors)
         {
-            Console.WriteLine($"Stopped after {config.MaxConsecutiveErrors} consecutive errors");
+            ColoredLogger.LogError($"Stopped after {config.MaxConsecutiveErrors} consecutive errors");
         }
 
-        Console.WriteLine("Download process completed!");
+        ColoredLogger.LogSuccess("Download process completed!");
     }
 
     private static AppConfig LoadConfig()
@@ -160,7 +227,7 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading config: {ex.Message}. Using defaults.");
+            ColoredLogger.LogWarning($"Error loading config: {ex.Message}. Using defaults.");
         }
         return new AppConfig();
     }
@@ -177,7 +244,7 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading API key from file: {ex.Message}");
+            ColoredLogger.LogError($"Error loading API key from file: {ex.Message}");
         }
 
         return null;
@@ -254,10 +321,8 @@ class Program
             if (string.IsNullOrWhiteSpace(downloadResponse[0].URI))
             {
                 return null;
-            }
-
-            // Return the first valid download URL
-            Console.WriteLine($"Download URL for mod {modId}, file {fileId}: {downloadResponse[0].URI}");
+            }            // Return the first valid download URL
+            ColoredLogger.LogDebug($"Download URL for mod {modId}, file {fileId}: {downloadResponse[0].URI}");
             // Return the URI of the first download link
             return downloadResponse[0].URI;
         }
@@ -282,33 +347,30 @@ class Program
             await response.Content.CopyToAsync(fileStream);
         }
 
-        Console.WriteLine($"Downloaded {zipPath}");
+        ColoredLogger.LogSuccess($"Downloaded {zipPath}");
 
         // Extract zip file
         var extractPath = modDirectory;
-        Directory.CreateDirectory(extractPath);
-
-        try
+        Directory.CreateDirectory(extractPath); try
         {
             ZipFile.ExtractToDirectory(zipPath, extractPath);
-            Console.WriteLine("Extracted zip file");
+            ColoredLogger.LogSuccess("Extracted zip file");
 
             // Delete .archive files if configured
             if (config.DeleteArchiveFiles)
             {
-                var archiveFiles = Directory.GetFiles(extractPath, "*.archive", SearchOption.AllDirectories);
-                foreach (var archiveFile in archiveFiles)
+                var archiveFiles = Directory.GetFiles(extractPath, "*.archive", SearchOption.AllDirectories); foreach (var archiveFile in archiveFiles)
                 {
                     File.Delete(archiveFile);
-                    Console.WriteLine($"Deleted archive file: {Path.GetFileName(archiveFile)}");
+                    ColoredLogger.LogInfo($"Deleted archive file: {Path.GetFileName(archiveFile)}");
                 }
 
-                Console.WriteLine($"Removed {archiveFiles.Length} .archive files");
+                ColoredLogger.LogInfo($"Removed {archiveFiles.Length} .archive files");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error extracting zip: {ex.Message}");
+            ColoredLogger.LogError($"Error extracting zip: {ex.Message}");
         }
 
         // Delete the original zip file if configured
@@ -336,13 +398,11 @@ class Program
             file_name = modFile.file_name,
             file_version = modFile.version,
             file_size = modFile.size_kb
-        };
-
-        var metadataPath = Path.Combine(modDirectory, "metadata.json");
+        }; var metadataPath = Path.Combine(modDirectory, "metadata.json");
         var metadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(metadataPath, metadataJson);
 
-        Console.WriteLine("Created metadata file");
+        ColoredLogger.LogSuccess("Created metadata file");
     }
 
     private static HashSet<int> LoadProcessedMods()
@@ -359,7 +419,7 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading processed mods: {ex.Message}");
+            ColoredLogger.LogError($"Error loading processed mods: {ex.Message}");
         }
 
         return new HashSet<int>();
@@ -375,7 +435,7 @@ class Program
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error saving processed mods: {ex.Message}");
+            ColoredLogger.LogError($"Error saving processed mods: {ex.Message}");
         }
     }
 }
@@ -518,12 +578,10 @@ public class ApiRateLimitTracker
         {
             // Always wait at least the configured delay between calls
             var timeSinceLastCall = DateTime.UtcNow - _lastCall;
-            var minDelay = TimeSpan.FromMilliseconds(Program.config.RateLimitDelayMs);
-
-            if (timeSinceLastCall < minDelay)
+            var minDelay = TimeSpan.FromMilliseconds(Program.config.RateLimitDelayMs); if (timeSinceLastCall < minDelay)
             {
                 var waitTime = minDelay - timeSinceLastCall;
-                Console.WriteLine($"Rate limiting: waiting {waitTime.TotalMilliseconds:F0}ms...");
+                ColoredLogger.LogRateLimit($"Rate limiting: waiting {waitTime.TotalMilliseconds:F0}ms...");
                 Thread.Sleep(waitTime);
             }
 
@@ -545,13 +603,12 @@ public class ApiRateLimitTracker
                 var waitTime = resetTime - DateTime.UtcNow;
                 waitMessage = $"Daily API limit low ({_dailyRemaining} remaining). Waiting until {resetTime:yyyy-MM-dd HH:mm:ss UTC} ({waitTime.TotalHours:F1} hours)";
             }
-
             if (needsWait)
             {
-                Console.WriteLine($"\n⚠️  API Rate Limit Warning ⚠️");
-                Console.WriteLine(waitMessage);
-                Console.WriteLine($"You can adjust MinHourlyCallsRemaining ({Program.config.MinHourlyCallsRemaining}) and MinDailyCallsRemaining ({Program.config.MinDailyCallsRemaining}) in config.json");
-                Console.WriteLine("Press Ctrl+C to stop or wait for automatic resume...\n");
+                ColoredLogger.LogWarning("API Rate Limit Warning");
+                ColoredLogger.LogWarning(waitMessage);
+                ColoredLogger.LogInfo($"You can adjust MinHourlyCallsRemaining ({Program.config.MinHourlyCallsRemaining}) and MinDailyCallsRemaining ({Program.config.MinDailyCallsRemaining}) in config.json");
+                ColoredLogger.LogInfo("Press Ctrl+C to stop or wait for automatic resume...");
             }
         }
 
@@ -590,19 +647,17 @@ public class ApiRateLimitTracker
                 waitUntil = _dailyReset ?? DateTime.UtcNow.AddDays(1);
                 waitType = "daily";
             }
-        }
-
-        while (DateTime.UtcNow < waitUntil)
+        } while (DateTime.UtcNow < waitUntil)
         {
             var remaining = waitUntil - DateTime.UtcNow;
-            Console.WriteLine($"Waiting for {waitType} reset... {remaining.TotalMinutes:F1} minutes remaining");
+            ColoredLogger.LogRateLimit($"Waiting for {waitType} reset... {remaining.TotalMinutes:F1} minutes remaining");
 
             // Wait in smaller chunks so we can show progress
             var waitTime = remaining.TotalMinutes > 5 ? TimeSpan.FromMinutes(5) : remaining;
             await Task.Delay(waitTime);
         }
 
-        Console.WriteLine($"{waitType} rate limit reset! Resuming operations...");
+        ColoredLogger.LogSuccess($"{waitType} rate limit reset! Resuming operations...");
     }
 
     private void LogRateLimitStatus()
@@ -612,11 +667,9 @@ public class ApiRateLimitTracker
         if (_hourlyRemaining.HasValue)
             status.Add($"Hourly: {_hourlyRemaining} remaining");
         if (_dailyRemaining.HasValue)
-            status.Add($"Daily: {_dailyRemaining} remaining");
-
-        if (status.Any())
+            status.Add($"Daily: {_dailyRemaining} remaining"); if (status.Any())
         {
-            Console.WriteLine($"📊 API Limits - {string.Join(", ", status)}");
+            ColoredLogger.LogApiLimit($"API Limits - {string.Join(", ", status)}");
         }
     }
 }
