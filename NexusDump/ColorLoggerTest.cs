@@ -4,7 +4,7 @@ namespace NexusDump;
 
 class ColorLoggerTest
 {
-    static void Main(string[] args)
+    static void TestLogs(string[] args)
     {
         Console.WriteLine("Testing Colored Logger:");
         Console.WriteLine("======================");
