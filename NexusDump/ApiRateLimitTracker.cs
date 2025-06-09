@@ -80,7 +80,7 @@ namespace NexusDump
                 if (timeSinceLastCall < minDelay)
                 {
                     var waitTime = minDelay - timeSinceLastCall;
-                    ColoredLogger.LogRateLimit($"Rate limiting: waiting {waitTime.TotalMilliseconds:F0}ms...");
+                    ColoredLogger.LogInfo($"Rate limiting: waiting {waitTime.TotalMilliseconds:F0}ms...");
                     Thread.Sleep(waitTime);
                 }
 
@@ -159,7 +159,7 @@ namespace NexusDump
             while (DateTime.UtcNow < waitUntil)
             {
                 var remaining = waitUntil - DateTime.UtcNow;
-                ColoredLogger.LogRateLimit($"Waiting for {waitType} reset... {remaining.TotalMinutes:F1} minutes remaining");
+                ColoredLogger.LogInfo($"Waiting for {waitType} reset... {remaining.TotalMinutes:F1} minutes remaining");
 
                 // Wait in smaller chunks so we can show progress
                 var waitTime = remaining.TotalMinutes > 5 ? TimeSpan.FromMinutes(5) : remaining;
@@ -183,7 +183,7 @@ namespace NexusDump
 
             if (status.Any())
             {
-                ColoredLogger.LogApiLimit($"API Limits - {string.Join(", ", status)}");
+                ColoredLogger.LogInfo($"API Limits - {string.Join(", ", status)}");
             }
         }
     }

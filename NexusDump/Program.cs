@@ -5,6 +5,11 @@ using NexusDump.Models;
 
 namespace NexusDump;
 
+// TODO
+// Skip rar mod
+// save status of skipped mods in json 
+// delete dll files from mods
+
 class Program
 {
     private static readonly HttpClient httpClient = new();
@@ -76,15 +81,17 @@ class Program
                     continue;
                 }
 
-                ColoredLogger.LogProgress($"Processing mod ID: {currentModId}");
+                Console.WriteLine();
+                ColoredLogger.LogInfo($"Processing mod ID: {currentModId}");
 
                 // Get mod info
                 var modInfo = await GetModInfo(currentModId); if (modInfo == null)
                 {
                     ColoredLogger.LogWarning($"Mod {currentModId} not found or inaccessible");
-
+                    processedMods.Add(currentModId);
+                    SaveProcessedMods(processedMods);
                     currentModId--;
-                    consecutiveErrors++;
+                    //consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
                 }
@@ -96,14 +103,15 @@ class Program
                 if (modFiles == null || modFiles.Length == 0)
                 {
                     ColoredLogger.LogWarning($"No files found for mod {currentModId}");
-
+                    processedMods.Add(currentModId);
+                    SaveProcessedMods(processedMods);
                     currentModId--;
-                    consecutiveErrors++;
+                    //consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
                 }                // Download first file
                 var firstFile = modFiles[0];
-                ColoredLogger.LogDownload($"Downloading file: {firstFile.name}");
+                ColoredLogger.LogDebug($"Downloading file: {firstFile.name}");
 
                 var downloadUrl = await GetDownloadUrl(currentModId, firstFile.file_id);
                 if (downloadUrl == null)
