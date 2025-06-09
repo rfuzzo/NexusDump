@@ -1,0 +1,16 @@
+# Build results
+bin/
+obj/
+
+# User-specific files
+apikey.txt
+processed_mods.json
+downloaded_mods/
+
+# VS Code
+.vscode/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
