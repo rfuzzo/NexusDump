@@ -8,7 +8,8 @@ class Program
 {
     private static readonly HttpClient httpClient = new();
     private static readonly string baseUrl = "https://api.nexusmods.com/v1";
-    private static AppConfig config = new();
+    public static AppConfig config = new();
+    private static ApiRateLimitTracker rateLimitTracker = new();
 
     static async Task Main(string[] args)
     {
@@ -186,7 +187,10 @@ class Program
     {
         try
         {
+            await rateLimitTracker.WaitIfNeeded();
             var response = await httpClient.GetAsync($"{baseUrl}/games/{config.GameId}/mods/{modId}");
+            rateLimitTracker.UpdateFromResponse(response);
+
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -205,7 +209,10 @@ class Program
     {
         try
         {
+            await rateLimitTracker.WaitIfNeeded();
             var response = await httpClient.GetAsync($"{baseUrl}/games/{config.GameId}/mods/{modId}/files");
+            rateLimitTracker.UpdateFromResponse(response);
+
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -225,7 +232,10 @@ class Program
     {
         try
         {
+            await rateLimitTracker.WaitIfNeeded();
             var response = await httpClient.GetAsync($"{baseUrl}/games/{config.GameId}/mods/{modId}/files/{fileId}/download_link");
+            rateLimitTracker.UpdateFromResponse(response);
+
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -382,6 +392,9 @@ public class AppConfig
     public bool DeleteArchiveFiles { get; set; } = true;
     public bool DeleteOriginalZip { get; set; } = true;
     public int MaxModsToProcess { get; set; } = -1; // -1 = unlimited, any positive number = limit for debugging
+    public int MinHourlyCallsRemaining { get; set; } = 10; // Wait if hourly calls drop below this
+    public int MinDailyCallsRemaining { get; set; } = 50; // Wait if daily calls drop below this
+    public int RateLimitWaitMinutes { get; set; } = 60; // How long to wait when rate limit is hit
 }
 
 // Data models for NexusMods API responses
@@ -444,4 +457,166 @@ public class ModMetadata
     public string file_name { get; set; } = "";
     public string file_version { get; set; } = "";
     public int file_size { get; set; }
+}
+
+// Rate limiting tracker for NexusMods API
+public class ApiRateLimitTracker
+{
+    private int? _dailyRemaining;
+    private int? _hourlyRemaining;
+    private DateTime? _dailyReset;
+    private DateTime? _hourlyReset;
+    private DateTime _lastCall = DateTime.MinValue;
+    private readonly object _lock = new object();
+
+    public void UpdateFromResponse(HttpResponseMessage response)
+    {
+        lock (_lock)
+        {
+            _lastCall = DateTime.UtcNow;
+
+            // Extract rate limit headers - NexusMods uses these header names
+            if (response.Headers.TryGetValues("x-rl-daily-remaining", out var dailyRemainingValues))
+            {
+                if (int.TryParse(dailyRemainingValues.FirstOrDefault(), out var dailyRemaining))
+                {
+                    _dailyRemaining = dailyRemaining;
+                }
+            }
+
+            if (response.Headers.TryGetValues("x-rl-hourly-remaining", out var hourlyRemainingValues))
+            {
+                if (int.TryParse(hourlyRemainingValues.FirstOrDefault(), out var hourlyRemaining))
+                {
+                    _hourlyRemaining = hourlyRemaining;
+                }
+            }
+
+            if (response.Headers.TryGetValues("x-rl-daily-reset", out var dailyResetValues))
+            {
+                if (long.TryParse(dailyResetValues.FirstOrDefault(), out var dailyResetTimestamp))
+                {
+                    _dailyReset = DateTimeOffset.FromUnixTimeSeconds(dailyResetTimestamp).DateTime;
+                }
+            }
+
+            if (response.Headers.TryGetValues("x-rl-hourly-reset", out var hourlyResetValues))
+            {
+                if (long.TryParse(hourlyResetValues.FirstOrDefault(), out var hourlyResetTimestamp))
+                {
+                    _hourlyReset = DateTimeOffset.FromUnixTimeSeconds(hourlyResetTimestamp).DateTime;
+                }
+            }
+
+            LogRateLimitStatus();
+        }
+    }
+
+    public async Task WaitIfNeeded()
+    {
+        lock (_lock)
+        {
+            // Always wait at least the configured delay between calls
+            var timeSinceLastCall = DateTime.UtcNow - _lastCall;
+            var minDelay = TimeSpan.FromMilliseconds(Program.config.RateLimitDelayMs);
+
+            if (timeSinceLastCall < minDelay)
+            {
+                var waitTime = minDelay - timeSinceLastCall;
+                Console.WriteLine($"Rate limiting: waiting {waitTime.TotalMilliseconds:F0}ms...");
+                Thread.Sleep(waitTime);
+            }
+
+            // Check if we need to wait due to low API call limits
+            var needsWait = false;
+            var waitMessage = "";
+
+            if (_hourlyRemaining.HasValue && _hourlyRemaining.Value <= Program.config.MinHourlyCallsRemaining)
+            {
+                needsWait = true;
+                var resetTime = _hourlyReset ?? DateTime.UtcNow.AddHours(1);
+                var waitTime = resetTime - DateTime.UtcNow;
+                waitMessage = $"Hourly API limit low ({_hourlyRemaining} remaining). Waiting until {resetTime:HH:mm:ss UTC} ({waitTime.TotalMinutes:F1} minutes)";
+            }
+            else if (_dailyRemaining.HasValue && _dailyRemaining.Value <= Program.config.MinDailyCallsRemaining)
+            {
+                needsWait = true;
+                var resetTime = _dailyReset ?? DateTime.UtcNow.AddDays(1);
+                var waitTime = resetTime - DateTime.UtcNow;
+                waitMessage = $"Daily API limit low ({_dailyRemaining} remaining). Waiting until {resetTime:yyyy-MM-dd HH:mm:ss UTC} ({waitTime.TotalHours:F1} hours)";
+            }
+
+            if (needsWait)
+            {
+                Console.WriteLine($"\n⚠️  API Rate Limit Warning ⚠️");
+                Console.WriteLine(waitMessage);
+                Console.WriteLine($"You can adjust MinHourlyCallsRemaining ({Program.config.MinHourlyCallsRemaining}) and MinDailyCallsRemaining ({Program.config.MinDailyCallsRemaining}) in config.json");
+                Console.WriteLine("Press Ctrl+C to stop or wait for automatic resume...\n");
+            }
+        }
+
+        if (CheckNeedsLongWait())
+        {
+            await WaitForReset();
+        }
+    }
+
+    private bool CheckNeedsLongWait()
+    {
+        lock (_lock)
+        {
+            if (_hourlyRemaining.HasValue && _hourlyRemaining.Value <= Program.config.MinHourlyCallsRemaining)
+                return true;
+            if (_dailyRemaining.HasValue && _dailyRemaining.Value <= Program.config.MinDailyCallsRemaining)
+                return true;
+            return false;
+        }
+    }
+
+    private async Task WaitForReset()
+    {
+        DateTime waitUntil;
+        string waitType;
+
+        lock (_lock)
+        {
+            if (_hourlyRemaining.HasValue && _hourlyRemaining.Value <= Program.config.MinHourlyCallsRemaining)
+            {
+                waitUntil = _hourlyReset ?? DateTime.UtcNow.AddHours(1);
+                waitType = "hourly";
+            }
+            else
+            {
+                waitUntil = _dailyReset ?? DateTime.UtcNow.AddDays(1);
+                waitType = "daily";
+            }
+        }
+
+        while (DateTime.UtcNow < waitUntil)
+        {
+            var remaining = waitUntil - DateTime.UtcNow;
+            Console.WriteLine($"Waiting for {waitType} reset... {remaining.TotalMinutes:F1} minutes remaining");
+
+            // Wait in smaller chunks so we can show progress
+            var waitTime = remaining.TotalMinutes > 5 ? TimeSpan.FromMinutes(5) : remaining;
+            await Task.Delay(waitTime);
+        }
+
+        Console.WriteLine($"{waitType} rate limit reset! Resuming operations...");
+    }
+
+    private void LogRateLimitStatus()
+    {
+        var status = new List<string>();
+
+        if (_hourlyRemaining.HasValue)
+            status.Add($"Hourly: {_hourlyRemaining} remaining");
+        if (_dailyRemaining.HasValue)
+            status.Add($"Daily: {_dailyRemaining} remaining");
+
+        if (status.Any())
+        {
+            Console.WriteLine($"📊 API Limits - {string.Join(", ", status)}");
+        }
+    }
 }
