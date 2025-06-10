@@ -5,10 +5,50 @@ using NexusDump.Models;
 
 namespace NexusDump;
 
-// TODO
-// Skip rar mod
-// save status of skipped mods in json 
-// delete dll files from mods
+// TODO (2025-06-10):
+// 
+// === HIGH PRIORITY ===
+// 1. API Optimization & Efficiency
+//    - [ ] Optimize Nexus API calls: Make only one call per mod if possible
+//    - [ ] Skip mod metadata if too heavy/unnecessary
+//    - [ ] Cache API responses to avoid redundant calls  
+//
+// 2. Enhanced Metadata & Tracking
+//    - [ ] Save list of files inside each zip to metadata
+//    - [ ] Track mod IDs for mods with no files (for skip/recheck later)
+//    - [ ] Track mod IDs for other fail conditions (API errors, download failures, etc.)
+//    - [ ] Expand serialized info file to include failure reasons and timestamps
+//    - [ ] Add retry mechanism for previously failed mods
+//
+// 3. Command Line Interface & Commands
+//    - [ ] Integrate ConsoleAppFramework command parser
+//    - [ ] Add 'download' command (current functionality)
+//    - [ ] Add 'resume' command to continue from last position
+//    - [ ] Add 'retry-failed' command to reprocess failed mods
+//    - [ ] Add 'stats' command to show download statistics
+//    - [ ] Add 'cleanup' command to remove incomplete downloads
+//    - [ ] Add 'list-failed' command to show failed mod IDs and reasons
+//
+// === MEDIUM PRIORITY ===
+// 4. File Processing & Filtering
+//    - [ ] Skip RAR mods (add RAR detection)
+//    - [ ] Delete DLL files from mods (configurable)
+//    - [ ] Add file type filtering (e.g., only extract specific extensions)
+//    - [ ] Implement mod validation (check for required files/structure)
+//
+// 5. Improved Error Handling & Logging
+//    - [ ] Better error categorization and handling
+//    - [ ] Add structured logging with different log levels
+//    - [ ] Create detailed error reports
+//    - [ ] Add progress tracking and ETA calculations
+//
+// === LOW PRIORITY ===
+// 6. Configuration & Features
+//    - [ ] Add configuration validation
+//    - [ ] Support for multiple game IDs
+//    - [ ] Parallel downloads (with rate limiting)
+//    - [ ] Resume interrupted downloads
+//    - [ ] Add mod dependency tracking
 
 class Program
 {
