@@ -23,5 +23,9 @@ namespace NexusDump.Models
         public string file_name { get; set; } = "";
         public string file_version { get; set; } = "";
         public int file_size { get; set; }
+        
+        // New fields for enhanced metadata
+        public List<string> extracted_files { get; set; } = new();
+        public DateTime processed_at { get; set; }
     }
 }
