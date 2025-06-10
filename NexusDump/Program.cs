@@ -9,8 +9,8 @@ namespace NexusDump;
 // 
 // === HIGH PRIORITY ===
 // 1. API Optimization & Efficiency
-//    - [ ] Optimize Nexus API calls: Make only one call per mod if possible
-//    - [ ] Skip mod metadata if too heavy/unnecessary
+//    - [x] Optimize Nexus API calls: Make only one call per mod if possible - implemented pre-filtering
+//    - [x] Skip mod metadata if too heavy/unnecessary - configurable via CollectFullMetadata
 //    - [ ] Cache API responses to avoid redundant calls  
 //
 // 2. Enhanced Metadata & Tracking
@@ -35,20 +35,6 @@ namespace NexusDump;
 //    - [x] Delete DLL files from mods (configurable)
 //    - [x] Add file type filtering (e.g., only extract specific extensions)
 //    - [x] Implement mod validation (check for required files/structure) - skipped per request
-//
-// 5. Improved Error Handling & Logging
-//    - [ ] Better error categorization and handling
-//    - [ ] Add structured logging with different log levels
-//    - [ ] Create detailed error reports
-//    - [ ] Add progress tracking and ETA calculations
-//
-// === LOW PRIORITY ===
-// 6. Configuration & Features
-//    - [ ] Add configuration validation
-//    - [ ] Support for multiple game IDs
-//    - [ ] Parallel downloads (with rate limiting)
-//    - [ ] Resume interrupted downloads
-//    - [ ] Add mod dependency tracking
 
 class Program
 {
@@ -131,21 +117,7 @@ class Program
                 Console.WriteLine();
                 ColoredLogger.LogInfo($"Processing mod ID: {currentModId}");
 
-                // Get mod info
-                var modInfo = await GetModInfo(currentModId);                if (modInfo == null)
-                {
-                    ColoredLogger.LogWarning($"Mod {currentModId} not found or inaccessible");
-                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.NotFound, "Mod not found or inaccessible");
-                    SaveModProcessingTracker(processedModsTracker);
-                    currentModId--;
-                    //consecutiveErrors++;
-                    await Task.Delay(config.RateLimitDelayMs);
-                    continue;
-                }
-
-                ColoredLogger.LogSuccess($"Found mod: {modInfo.name}");
-
-                // Get mod files
+                // OPTIMIZATION: Check files first to avoid unnecessary mod info call
                 var modFiles = await GetModFiles(currentModId);
                 if (modFiles == null || modFiles.Length == 0)
                 {
@@ -153,24 +125,48 @@ class Program
                     TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.NoFiles, "No files found for mod");
                     SaveModProcessingTracker(processedModsTracker);
                     currentModId--;
-                    //consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
-                }                // Download first file (but only if it's an allowed file type)
-                var firstFile = modFiles[0];
+                }
+
+                // Check if any file has an allowed extension (pre-filtering)
+                var validFile = modFiles.FirstOrDefault(f => 
+                    config.AllowedModFileExtensions.Contains(Path.GetExtension(f.file_name).ToLowerInvariant()));
                 
-                // Check if the file extension is allowed
-                var fileExtension = Path.GetExtension(firstFile.file_name).ToLowerInvariant();
-                if (!config.AllowedModFileExtensions.Contains(fileExtension))
+                if (validFile == null)
                 {
-                    ColoredLogger.LogWarning($"Skipping unsupported file type: {firstFile.file_name} (extension: {fileExtension})");
-                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.SkippedUnsupportedFormat, $"Unsupported file extension: {fileExtension}");
+                    ColoredLogger.LogWarning($"No supported file types found for mod {currentModId}");
+                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.SkippedUnsupportedFormat, 
+                        "No supported file extensions found");
                     SaveModProcessingTracker(processedModsTracker);
                     currentModId--;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
                 }
-                
+
+                // Get mod info only if we need full metadata AND we have valid files
+                ModInfo? modInfo = null;
+                if (config.CollectFullMetadata)
+                {
+                    modInfo = await GetModInfo(currentModId);
+                    if (modInfo == null)
+                    {
+                        ColoredLogger.LogWarning($"Mod {currentModId} not found or inaccessible");
+                        TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.NotFound, "Mod not found or inaccessible");
+                        SaveModProcessingTracker(processedModsTracker);
+                        currentModId--;
+                        await Task.Delay(config.RateLimitDelayMs);
+                        continue;
+                    }
+                    ColoredLogger.LogSuccess($"Found mod: {modInfo.name}");
+                }
+                else
+                {
+                    ColoredLogger.LogSuccess($"Found mod {currentModId} with valid files (metadata collection disabled)");
+                }
+
+                // Use the first valid file
+                var firstFile = validFile;
                 ColoredLogger.LogDebug($"Downloading file: {firstFile.name}");
 
                 var downloadUrl = await GetDownloadUrl(currentModId, firstFile.file_id);
@@ -333,7 +329,7 @@ class Program
         }
     }
 
-    private static async Task DownloadAndProcessMod(int modId, string downloadUrl, ModInfo modInfo, ModFile modFile, ModProcessingTracker tracker)
+    private static async Task DownloadAndProcessMod(int modId, string downloadUrl, ModInfo? modInfo, ModFile modFile, ModProcessingTracker tracker)
     {
         var modDirectory = Path.Combine(config.OutputDirectory, modId.ToString());
         Directory.CreateDirectory(modDirectory);
@@ -406,23 +402,25 @@ class Program
         var metadata = new ModMetadata
         {
             mod_id = modId,
-            name = modInfo.name,
-            summary = modInfo.summary,
-            description = modInfo.description,
-            category_id = modInfo.category_id,
-            version = modInfo.version,
-            author = modInfo.author,
-            uploaded_by = modInfo.uploaded_by,
-            created_time = modInfo.created_time,
-            updated_time = modInfo.updated_time,
-            endorsement_count = modInfo.endorsement_count,
-            download_count = modInfo.download_count,
-            tags = modInfo.tags,
             file_name = modFile.file_name,
             file_version = modFile.version,
             file_size = modFile.size_kb,
             extracted_files = extractedFiles,
-            processed_at = DateTime.UtcNow
+            processed_at = DateTime.UtcNow,
+            
+            // Only set these if we have full mod info
+            name = modInfo?.name,
+            summary = modInfo?.summary,
+            description = modInfo?.description,
+            category_id = modInfo?.category_id,
+            version = modInfo?.version,
+            author = modInfo?.author,
+            uploaded_by = modInfo?.uploaded_by,
+            created_time = modInfo?.created_time,
+            updated_time = modInfo?.updated_time,
+            endorsement_count = modInfo?.endorsement_count,
+            download_count = modInfo?.download_count,
+            tags = modInfo?.tags
         }; var metadataPath = Path.Combine(modDirectory, "metadata.json");
         var metadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(metadataPath, metadataJson);

@@ -14,6 +14,7 @@ namespace NexusDump
         public bool DeleteOriginalZip { get; set; } = true;
         public string[] AllowedModFileExtensions { get; set; } = { ".zip" }; // Only these file types will be downloaded as mods
         public string[] DeletedFileExtensions { get; set; } = { ".dll", ".archive" }; // These file types will be deleted after extraction
+        public bool CollectFullMetadata { get; set; } = true; // If false, skip heavy mod info API call (saves 1 API call per mod)
         public int MaxModsToProcess { get; set; } = -1; // -1 = unlimited, any positive number = limit for debugging
         public int MinHourlyCallsRemaining { get; set; } = 10; // Wait if hourly calls drop below this
         public int MinDailyCallsRemaining { get; set; } = 50; // Wait if daily calls drop below this
