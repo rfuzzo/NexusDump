@@ -10,6 +10,7 @@ namespace NexusDump.Models
         DownloadFailed,
         ExtractionFailed,
         ApiError,
+        SkippedUnsupportedFormat,
         UnknownError
     }
 

@@ -11,8 +11,9 @@ namespace NexusDump
         public string OutputDirectory { get; set; } = "downloaded_mods";
         public string ProcessedModsFile { get; set; } = "processed_mods.json";
         public string GameId { get; set; } = "cyberpunk2077";
-        public bool DeleteArchiveFiles { get; set; } = true;
         public bool DeleteOriginalZip { get; set; } = true;
+        public string[] AllowedModFileExtensions { get; set; } = { ".zip" }; // Only these file types will be downloaded as mods
+        public string[] DeletedFileExtensions { get; set; } = { ".dll", ".archive" }; // These file types will be deleted after extraction
         public int MaxModsToProcess { get; set; } = -1; // -1 = unlimited, any positive number = limit for debugging
         public int MinHourlyCallsRemaining { get; set; } = 10; // Wait if hourly calls drop below this
         public int MinDailyCallsRemaining { get; set; } = 50; // Wait if daily calls drop below this

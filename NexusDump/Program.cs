@@ -31,10 +31,10 @@ namespace NexusDump;
 //
 // === MEDIUM PRIORITY ===
 // 4. File Processing & Filtering
-//    - [ ] Skip RAR mods (add RAR detection)
-//    - [ ] Delete DLL files from mods (configurable)
-//    - [ ] Add file type filtering (e.g., only extract specific extensions)
-//    - [ ] Implement mod validation (check for required files/structure)
+//    - [x] Skip RAR mods (add RAR detection) - replaced with extension-based filtering
+//    - [x] Delete DLL files from mods (configurable)
+//    - [x] Add file type filtering (e.g., only extract specific extensions)
+//    - [x] Implement mod validation (check for required files/structure) - skipped per request
 //
 // 5. Improved Error Handling & Logging
 //    - [ ] Better error categorization and handling
@@ -156,8 +156,21 @@ class Program
                     //consecutiveErrors++;
                     await Task.Delay(config.RateLimitDelayMs);
                     continue;
-                }                // Download first file
+                }                // Download first file (but only if it's an allowed file type)
                 var firstFile = modFiles[0];
+                
+                // Check if the file extension is allowed
+                var fileExtension = Path.GetExtension(firstFile.file_name).ToLowerInvariant();
+                if (!config.AllowedModFileExtensions.Contains(fileExtension))
+                {
+                    ColoredLogger.LogWarning($"Skipping unsupported file type: {firstFile.file_name} (extension: {fileExtension})");
+                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.SkippedUnsupportedFormat, $"Unsupported file extension: {fileExtension}");
+                    SaveModProcessingTracker(processedModsTracker);
+                    currentModId--;
+                    await Task.Delay(config.RateLimitDelayMs);
+                    continue;
+                }
+                
                 ColoredLogger.LogDebug($"Downloading file: {firstFile.name}");
 
                 var downloadUrl = await GetDownloadUrl(currentModId, firstFile.file_id);
@@ -358,21 +371,22 @@ class Program
             ZipFile.ExtractToDirectory(zipPath, extractPath);
             ColoredLogger.LogSuccess($"Extracted zip file - {extractedFiles.Count} files found");
 
-            // Delete .archive files if configured
-            if (config.DeleteArchiveFiles)
+            // Delete files with configured extensions (but keep them in the extracted files list)
+            foreach (var extension in config.DeletedFileExtensions)
             {
-                var archiveFiles = Directory.GetFiles(extractPath, "*.archive", SearchOption.AllDirectories);
-                foreach (var archiveFile in archiveFiles)
+                var pattern = $"*{extension}";
+                var filesToDelete = Directory.GetFiles(extractPath, pattern, SearchOption.AllDirectories);
+                
+                foreach (var fileToDelete in filesToDelete)
                 {
-                    File.Delete(archiveFile);
-                    ColoredLogger.LogInfo($"Deleted archive file: {Path.GetFileName(archiveFile)}");
-                    
-                    // Remove from extracted files list too
-                    var relativePath = Path.GetRelativePath(extractPath, archiveFile);
-                    extractedFiles.RemoveAll(f => f.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
+                    File.Delete(fileToDelete);
+                    ColoredLogger.LogInfo($"Deleted {extension} file: {Path.GetFileName(fileToDelete)}");
                 }
 
-                ColoredLogger.LogInfo($"Removed {archiveFiles.Length} .archive files");
+                if (filesToDelete.Length > 0)
+                {
+                    ColoredLogger.LogInfo($"Removed {filesToDelete.Length} {extension} files");
+                }
             }
         }
         catch (Exception ex)
