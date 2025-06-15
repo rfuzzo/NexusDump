@@ -1,7 +1,8 @@
-﻿using System.IO.Compression;
-using System.Net.Http.Headers;
-using System.Text.Json;
+﻿using ConsoleAppFramework;
 using NexusDump.Models;
+using System.Collections.Generic;
+using System.IO.Compression;
+using System.Text.Json;
 
 namespace NexusDump;
 
@@ -21,13 +22,7 @@ namespace NexusDump;
 //    - [ ] Add retry mechanism for previously failed mods (waiting for CLI parser)
 //
 // 3. Command Line Interface & Commands
-//    - [ ] Integrate ConsoleAppFramework command parser
-//    - [ ] Add 'download' command (current functionality)
-//    - [ ] Add 'resume' command to continue from last position
-//    - [ ] Add 'retry-failed' command to reprocess failed mods
-//    - [ ] Add 'stats' command to show download statistics
-//    - [ ] Add 'cleanup' command to remove incomplete downloads
-//    - [ ] Add 'list-failed' command to show failed mod IDs and reasons
+//    - [x] Integrate ConsoleAppFramework command parser
 //
 // === MEDIUM PRIORITY ===
 // 4. File Processing & Filtering
@@ -36,15 +31,25 @@ namespace NexusDump;
 //    - [x] Add file type filtering (e.g., only extract specific extensions)
 //    - [x] Implement mod validation (check for required files/structure) - skipped per request
 
+
+
 class Program
 {
     private static readonly HttpClient httpClient = new();
     private static readonly string baseUrl = "https://api.nexusmods.com/v1";
     public static AppConfig config = new();
-    private static ApiRateLimitTracker rateLimitTracker = new();
+    private static readonly ApiRateLimitTracker rateLimitTracker = new();
 
     static async Task Main(string[] args)
     {
+        var app = ConsoleAppFramework.ConsoleApp.Create();
+        app.Add("", () => { });
+        app.Add("dump", async (string? list, string? key = null, CancellationToken cancellationToken = default) => await DumpAsync(list, key));
+
+        await app.RunAsync(args);
+    }
+
+    private static async Task DumpAsync(string? list, string? key) { 
         ColoredLogger.LogHeader("NexusMods Cyberpunk 2077 Mod Downloader");
         ColoredLogger.LogHeader("=======================================");
 
@@ -52,18 +57,11 @@ class Program
         config = LoadConfig();
 
         // Get API key from file or user input
-        string? apiKey = LoadApiKey(); if (string.IsNullOrWhiteSpace(apiKey))
+        string? apiKey = key ?? LoadApiKey();
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.Write("Enter your NexusMods API key: ");
-            Console.ResetColor();
-            apiKey = Console.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                ColoredLogger.LogError("API key is required. Exiting...");
-                return;
-            }
+            ColoredLogger.LogError("API key is required. Exiting...");
+            return;
         }
         else
         {
@@ -78,10 +76,10 @@ class Program
         Directory.CreateDirectory(config.OutputDirectory);
 
         // Load processed mods
-        var processedModsTracker = LoadModProcessingTracker();        ColoredLogger.LogInfo($"Starting from mod ID {config.StartingModId}, working backwards...");
+        var processedModsTracker = LoadModProcessingTracker(); ColoredLogger.LogInfo($"Starting from mod ID {config.StartingModId}, working backwards...");
         var successfulMods = processedModsTracker.GetSuccessfulModIds();
         ColoredLogger.LogInfo($"Already processed {successfulMods.Count} mods successfully");
-        
+
         var failedMods = processedModsTracker.GetFailedMods();
         if (failedMods.Count > 0)
         {
@@ -93,18 +91,64 @@ class Program
             ColoredLogger.LogDebug($"Debug mode: Will process maximum {config.MaxModsToProcess} mods");
         }
 
+        // Load mods from file if provided
+        List<int> modIds = new List<int>();
+        if (!string.IsNullOrWhiteSpace(list) && File.Exists(list))
+        {
+            ColoredLogger.LogInfo($"Loading mod IDs from file: {list}");
+            var modStringIds = await File.ReadAllLinesAsync(list);
+            if (modStringIds.Length == 0)
+            {
+                ColoredLogger.LogWarning("No mod IDs found in the provided file. Using default starting mod ID.");
+            }
+            else
+            {
+                ColoredLogger.LogInfo($"Loaded {modStringIds.Length} mod IDs from file.");
+            }
+
+            // Convert to integers and filter out invalid IDs
+            modIds = modStringIds
+                .Select(id => int.TryParse(id.Trim(), out var parsedId) ? parsedId : -1)
+                .Where(id => id > 0)
+                .ToList();
+
+            // set the starting mod ID to the highest from the list if provided
+            if (modIds.Count > 0)
+            {
+                config.StartingModId = modIds.Max();
+                ColoredLogger.LogInfo($"Starting mod ID set to the highest from the list: {config.StartingModId}");
+            }
+        }
+
         int currentModId = config.StartingModId;
         int consecutiveErrors = 0;
         int processedCount = 0;
 
         while (currentModId > 0 && consecutiveErrors < config.MaxConsecutiveErrors)
         {
+            // check if mod is in list file if provided
+            if (modIds.Count > 0 && !modIds.Contains(currentModId))
+            {
+                ColoredLogger.LogDebug($"Mod ID {currentModId} not in provided list, skipping...");
+                currentModId--;
+                continue;
+            }
+
             // Check if we've reached the debug limit
             if (config.MaxModsToProcess > 0 && processedCount >= config.MaxModsToProcess)
             {
                 ColoredLogger.LogInfo($"Debug limit reached: processed {processedCount} mods");
                 break;
             }
+
+            // do not process mods that are failed previously
+            if (failedMods.Any(m => m.ModId == currentModId ))
+            {
+                ColoredLogger.LogDebug($"Mod {currentModId} failed previously, skipping...");
+                currentModId--;
+                continue;
+            }
+
             try
             {
                 if (successfulMods.Contains(currentModId))
@@ -130,13 +174,13 @@ class Program
                 }
 
                 // Check if any file has an allowed extension (pre-filtering)
-                var validFile = modFiles.FirstOrDefault(f => 
+                var validFile = modFiles.FirstOrDefault(f =>
                     config.AllowedModFileExtensions.Contains(Path.GetExtension(f.file_name).ToLowerInvariant()));
-                
+
                 if (validFile == null)
                 {
                     ColoredLogger.LogWarning($"No supported file types found for mod {currentModId}");
-                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.SkippedUnsupportedFormat, 
+                    TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.SkippedUnsupportedFormat,
                         "No supported file extensions found");
                     SaveModProcessingTracker(processedModsTracker);
                     currentModId--;
@@ -183,7 +227,7 @@ class Program
 
                 // Download and process the mod
                 await DownloadAndProcessMod(currentModId, downloadUrl, modInfo, firstFile, processedModsTracker);
-                
+
                 // Mark as processed successfully
                 TrackModProcessing(processedModsTracker, currentModId, ModProcessingResult.Success, null);
                 SaveModProcessingTracker(processedModsTracker);
@@ -350,7 +394,7 @@ class Program
         var extractPath = modDirectory;
         Directory.CreateDirectory(extractPath);
         var extractedFiles = new List<string>();
-        
+
         try
         {
             using (var archive = ZipFile.OpenRead(zipPath))
@@ -363,7 +407,7 @@ class Program
                     }
                 }
             }
-            
+
             ZipFile.ExtractToDirectory(zipPath, extractPath);
             ColoredLogger.LogSuccess($"Extracted zip file - {extractedFiles.Count} files found");
 
@@ -372,7 +416,7 @@ class Program
             {
                 var pattern = $"*{extension}";
                 var filesToDelete = Directory.GetFiles(extractPath, pattern, SearchOption.AllDirectories);
-                
+
                 foreach (var fileToDelete in filesToDelete)
                 {
                     File.Delete(fileToDelete);
@@ -407,7 +451,7 @@ class Program
             file_size = modFile.size_kb,
             extracted_files = extractedFiles,
             processed_at = DateTime.UtcNow,
-            
+
             // Only set these if we have full mod info
             name = modInfo?.name,
             summary = modInfo?.summary,
@@ -466,7 +510,7 @@ class Program
     {
         // Remove any existing entry for this mod
         tracker.ProcessedMods.RemoveAll(m => m.ModId == modId);
-        
+
         // Add new entry
         tracker.ProcessedMods.Add(new ModProcessingStatus
         {
@@ -518,27 +562,27 @@ class Program
             .Where(m => m.RetryCount < maxRetries)
             .OrderBy(m => m.ModId)
             .ToList();
-            
+
         if (failedMods.Count == 0)
         {
             ColoredLogger.LogInfo("No failed mods available for retry");
             return;
         }
-        
+
         ColoredLogger.LogInfo($"Found {failedMods.Count} failed mods eligible for retry");
-        
+
         foreach (var failedMod in failedMods)
         {
             ColoredLogger.LogInfo($"Retrying mod {failedMod.ModId} (attempt #{failedMod.RetryCount + 1}, last failure: {failedMod.FailureReason})");
-            
+
             // Increment retry count
             failedMod.RetryCount++;
             failedMod.ProcessedAt = DateTime.UtcNow;
-            
+
             // Note: The actual retry logic would be integrated into the main processing loop
             // For now, we just update the retry count and save the tracker
         }
-        
+
         SaveModProcessingTracker(tracker);
     }
 
@@ -547,27 +591,27 @@ class Program
         var totalProcessed = tracker.ProcessedMods.Count;
         var successful = tracker.ProcessedMods.Count(m => m.Result == ModProcessingResult.Success);
         var failed = totalProcessed - successful;
-        
+
         ColoredLogger.LogHeader("Mod Processing Statistics");
         ColoredLogger.LogHeader("========================");
         ColoredLogger.LogInfo($"Total mods processed: {totalProcessed}");
         ColoredLogger.LogSuccess($"Successful: {successful}");
-        
+
         if (failed > 0)
         {
             ColoredLogger.LogError($"Failed: {failed}");
-            
+
             var failureGroups = tracker.ProcessedMods
                 .Where(m => m.Result != ModProcessingResult.Success)
                 .GroupBy(m => m.Result)
                 .OrderByDescending(g => g.Count());
-                
+
             foreach (var group in failureGroups)
             {
                 ColoredLogger.LogWarning($"  {group.Key}: {group.Count()}");
             }
         }
-        
+
         if (tracker.LastUpdated != default)
         {
             ColoredLogger.LogInfo($"Last updated: {tracker.LastUpdated:yyyy-MM-dd HH:mm:ss} UTC");

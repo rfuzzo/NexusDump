@@ -1,13 +1,18 @@
 {
     "StartingModId": 21959,
-    "RateLimitDelayMs": 1000,
+    "RateLimitDelayMs": 100,
     "MaxConsecutiveErrors": 10,
     "OutputDirectory": "downloaded_mods",
     "ProcessedModsFile": "processed_mods.json",
     "GameId": "cyberpunk2077",
     "DeleteOriginalZip": true,
-    "AllowedModFileExtensions": [".zip"],
-    "DeletedFileExtensions": [".dll", ".archive"],
+    "AllowedModFileExtensions": [
+        ".zip"
+    ],
+    "DeletedFileExtensions": [
+        ".dll",
+        ".archive"
+    ],
     "CollectFullMetadata": true,
     "MaxModsToProcess": 10,
     "MinHourlyCallsRemaining": 10,
