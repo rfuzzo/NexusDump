@@ -1,21 +1,29 @@
 {
-    "StartingModId": 21959,
-    "RateLimitDelayMs": 100,
-    "MaxConsecutiveErrors": 10,
-    "OutputDirectory": "downloaded_mods",
-    "ProcessedModsFile": "processed_mods.json",
-    "GameId": "cyberpunk2077",
-    "DeleteOriginalZip": true,
-    "AllowedModFileExtensions": [
-        ".zip"
-    ],
-    "DeletedFileExtensions": [
-        ".dll",
-        ".archive"
-    ],
-    "CollectFullMetadata": true,
-    "MaxModsToProcess": 10,
-    "MinHourlyCallsRemaining": 10,
-    "MinDailyCallsRemaining": 50,
-    "RateLimitWaitMinutes": 60
+  "StartingModId": 21959,
+  "RateLimitDelayMs": 100,
+  "MaxConsecutiveErrors": 10,
+  "OutputDirectory": "downloaded_mods",
+  "ProcessedModsFile": "processed_mods.json",
+  "GameId": "cyberpunk2077",
+  "DeleteOriginalZip": true,
+  "AllowedModFileExtensions": [
+    ".zip"
+  ],
+  "AllowedFileExtensions": [
+    ".reds",
+    ".lua",
+    ".json",
+    ".tweak",
+    ".txt",
+    ".md",
+    ".xl",
+    ".wscript",
+    ".xml",
+    ".yaml"
+  ],
+  "CollectFullMetadata": true,
+  "MaxModsToProcess": 10,
+  "MinHourlyCallsRemaining": 10,
+  "MinDailyCallsRemaining": 50,
+  "RateLimitWaitMinutes": 60
 }

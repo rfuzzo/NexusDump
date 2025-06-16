@@ -5,7 +5,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+	  <PublishSingleFile>true</PublishSingleFile>
   </PropertyGroup>
+	
   <ItemGroup>
     <PackageReference Include="ConsoleAppFramework" Version="5.4.1">
       <PrivateAssets>all</PrivateAssets>

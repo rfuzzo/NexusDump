@@ -44,11 +44,95 @@ class Program
     {
         var app = ConsoleAppFramework.ConsoleApp.Create();
         app.Add("", () => { });
-        app.Add("dump", async (string? list, string? key = null, CancellationToken cancellationToken = default) => await DumpAsync(list, key));
+        app.Add("dump", async (string? list = null, string? key = null, CancellationToken cancellationToken = default) => await DumpAsync(list, key));
+        app.Add("prepare", (string source, string target, string ? list = null) => Prepare(source, target, list));
 
         await app.RunAsync(args);
     }
 
+    /// <summary>
+    /// Prepares a downloaded mod directory for uploading.
+    /// </summary>
+    private static void Prepare(string source, string target, string? list = null)
+    {
+        ColoredLogger.LogHeader("NexusMods Cyberpunk 2077 Mod Downloader - Preparation");
+        ColoredLogger.LogHeader("=======================================");
+
+        // get the source directory
+        if (!Directory.Exists(source))
+        {
+            ColoredLogger.LogError($"Source directory does not exist: {source}");
+            return;
+        }
+        ColoredLogger.LogInfo($"Source directory: {source}");
+
+        // get the target directory
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            ColoredLogger.LogError("Target directory is required.");
+            return;
+        }
+        if (!Directory.Exists(target))
+        {
+            ColoredLogger.LogInfo($"Target directory does not exist, creating: {target}");
+            Directory.CreateDirectory(target);
+        }
+
+        // get list of mods from file if provided
+        List<int> modIds = new List<int>();
+        if (!string.IsNullOrWhiteSpace(list) && File.Exists(list))
+        {
+            ColoredLogger.LogInfo($"Loading mod IDs from file: {list}");
+            var modStringIds = File.ReadAllLines(list);
+            if (modStringIds.Length == 0)
+            {
+                ColoredLogger.LogWarning("No mod IDs found in the provided file. Using all mods in source directory.");
+            }
+            else
+            {
+                ColoredLogger.LogInfo($"Loaded {modStringIds.Length} mod IDs from file.");
+            }
+            // Convert to integers and filter out invalid IDs
+            modIds = modStringIds
+                .Select(id => int.TryParse(id.Trim(), out var parsedId) ? parsedId : -1)
+                .Where(id => id > 0)
+                .ToList();
+        }
+
+        // allowed file extensions
+        string[] allowedExtensions = [];
+
+        // go through each mod directory in the source and check that it contains a metadata.json` file
+        var modDirectories = Directory.GetDirectories(source);
+        if (modDirectories.Length == 0)
+        {
+            ColoredLogger.LogWarning("No mod directories found in the source directory.");
+            return;
+        }
+
+        ColoredLogger.LogInfo($"Found {modDirectories.Length} mod directories in the source directory.");
+
+        foreach (var modFolder in modDirectories)
+        {
+            var metadataPath = Path.Combine(modFolder, "metadata.json");
+            if (!File.Exists(metadataPath))
+            {
+                ColoredLogger.LogWarning($"No metadata.json found in {modFolder}, skipping...");
+                continue;
+            }
+
+            ColoredLogger.LogInfo($"Processing mod folder: {modFolder}");
+
+            // create 
+        }
+    }
+
+    /// <summary>
+    /// Dumps mods from NexusMods based on the provided list or starting mod ID.
+    /// </summary>
+    /// <param name="list"></param>
+    /// <param name="key"></param>
+    /// <returns></returns>
     private static async Task DumpAsync(string? list, string? key) { 
         ColoredLogger.LogHeader("NexusMods Cyberpunk 2077 Mod Downloader");
         ColoredLogger.LogHeader("=======================================");
@@ -73,7 +157,10 @@ class Program
         httpClient.DefaultRequestHeaders.Add("User-Agent", "NexusDump/1.0");
 
         // Create output directory
-        Directory.CreateDirectory(config.OutputDirectory);
+        if (!string.IsNullOrWhiteSpace(config.OutputDirectory))
+        {
+            Directory.CreateDirectory(config.OutputDirectory);
+        }
 
         // Load processed mods
         var processedModsTracker = LoadModProcessingTracker(); ColoredLogger.LogInfo($"Starting from mod ID {config.StartingModId}, working backwards...");
@@ -391,8 +478,10 @@ class Program
         ColoredLogger.LogSuccess($"Downloaded {zipPath}");
 
         // Extract zip file and collect file list
-        var extractPath = modDirectory;
+        var fileName = Path.GetFileNameWithoutExtension(zipPath);
+        var extractPath = Path.Combine(modDirectory, fileName);
         Directory.CreateDirectory(extractPath);
+
         var extractedFiles = new List<string>();
 
         try
@@ -411,21 +500,15 @@ class Program
             ZipFile.ExtractToDirectory(zipPath, extractPath);
             ColoredLogger.LogSuccess($"Extracted zip file - {extractedFiles.Count} files found");
 
-            // Delete files with configured extensions (but keep them in the extracted files list)
-            foreach (var extension in config.DeletedFileExtensions)
+            // Delete unwanted files based on configuration
+            var modFiles = Directory.GetFiles(extractPath, "*", SearchOption.AllDirectories);
+            foreach (var file in modFiles)
             {
-                var pattern = $"*{extension}";
-                var filesToDelete = Directory.GetFiles(extractPath, pattern, SearchOption.AllDirectories);
-
-                foreach (var fileToDelete in filesToDelete)
+                var ext = Path.GetExtension(file).ToLowerInvariant();
+                if (config.AllowedFileExtensions.Length > 0 && !config.AllowedFileExtensions.Contains(ext))
                 {
-                    File.Delete(fileToDelete);
-                    ColoredLogger.LogInfo($"Deleted {extension} file: {Path.GetFileName(fileToDelete)}");
-                }
-
-                if (filesToDelete.Length > 0)
-                {
-                    ColoredLogger.LogInfo($"Removed {filesToDelete.Length} {extension} files");
+                    ColoredLogger.LogDebug($"Deleting unsupported file: {file} ({ext})");
+                    File.Delete(file);
                 }
             }
         }
@@ -442,15 +525,22 @@ class Program
             File.Delete(zipPath);
         }
 
-        // Create metadata file
-        var metadata = new ModMetadata
+        // Create file metadata
+        var fileMetadata = new ModFileMetadata
         {
-            mod_id = modId,
             file_name = modFile.file_name,
             file_version = modFile.version,
             file_size = modFile.size_kb,
             extracted_files = extractedFiles,
             processed_at = DateTime.UtcNow,
+        };
+        var fileMetadataJson = JsonSerializer.Serialize(fileMetadata, new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(Path.Combine(modDirectory, $"{fileName}.json"), fileMetadataJson);
+
+        // Create metadata file
+        var metadata = new ModMetadata
+        {
+            mod_id = modId,
 
             // Only set these if we have full mod info
             name = modInfo?.name,
@@ -465,7 +555,9 @@ class Program
             endorsement_count = modInfo?.endorsement_count,
             download_count = modInfo?.download_count,
             tags = modInfo?.tags
-        }; var metadataPath = Path.Combine(modDirectory, "metadata.json");
+        }; 
+        
+        var metadataPath = Path.Combine(modDirectory, "metadata.json");
         var metadataJson = JsonSerializer.Serialize(metadata, new JsonSerializerOptions { WriteIndented = true });
         await File.WriteAllTextAsync(metadataPath, metadataJson);
 

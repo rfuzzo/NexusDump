@@ -8,12 +8,12 @@ namespace NexusDump
         public int StartingModId { get; set; } = 21959;
         public int RateLimitDelayMs { get; set; } = 1000;
         public int MaxConsecutiveErrors { get; set; } = 10;
-        public string OutputDirectory { get; set; } = "downloaded_mods";
+        public string OutputDirectory { get; set; } = "";
         public string ProcessedModsFile { get; set; } = "processed_mods.json";
         public string GameId { get; set; } = "cyberpunk2077";
         public bool DeleteOriginalZip { get; set; } = true;
         public string[] AllowedModFileExtensions { get; set; } = { ".zip" }; // Only these file types will be downloaded as mods
-        public string[] DeletedFileExtensions { get; set; } = { ".dll", ".archive" }; // These file types will be deleted after extraction
+        public string[] AllowedFileExtensions { get; set; } = { ".reds", ".lua", ".json", ".tweak", ".txt", ".md", ".xl", ".wscript", ".xml", ".yaml" }; // These file types will be allowed after extraction
         public bool CollectFullMetadata { get; set; } = true; // If false, skip heavy mod info API call (saves 1 API call per mod)
         public int MaxModsToProcess { get; set; } = -1; // -1 = unlimited, any positive number = limit for debugging
         public int MinHourlyCallsRemaining { get; set; } = 10; // Wait if hourly calls drop below this

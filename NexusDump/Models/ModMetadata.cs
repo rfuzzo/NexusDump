@@ -9,11 +9,6 @@ namespace NexusDump.Models
     {
         public int mod_id { get; set; }
         
-        // Basic info (always available from files endpoint)
-        public string file_name { get; set; } = "";
-        public string file_version { get; set; } = "";
-        public int file_size { get; set; }
-        
         // Enhanced metadata (only available when CollectFullMetadata = true)
         public string? name { get; set; }
         public string? summary { get; set; }
@@ -27,7 +22,15 @@ namespace NexusDump.Models
         public int? endorsement_count { get; set; }
         public int? download_count { get; set; }
         public ModTag[]? tags { get; set; }
-        
+    }
+
+    public class ModFileMetadata
+    {
+        // Basic info (always available from files endpoint)
+        public string file_name { get; set; } = "";
+        public string file_version { get; set; } = "";
+        public int file_size { get; set; }      
+
         // New fields for enhanced metadata
         public List<string> extracted_files { get; set; } = new();
         public DateTime processed_at { get; set; }
