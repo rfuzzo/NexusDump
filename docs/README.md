@@ -53,12 +53,18 @@ dotnet run -- dump [options]
 - `--list <file>`: Path to file containing mod IDs (one per line)
 - `--key <api_key>`: NexusMods API key (optional if using `apikey.txt`)
 
+**How it works:**
+- When a list file is provided, it starts from `StartingModId` and works backwards
+- It only processes mod IDs that are present in the provided list
+- Without a list file, it processes all mods backwards from `StartingModId`
+
 **What it does:**
 1. Reads mod IDs from the specified list file (`data/mod_ids.txt` contains 5,773+ curated mod IDs)
-2. Downloads each mod's ZIP file from NexusMods
-3. Extracts the ZIP and filters files by extension
-4. Saves metadata about each mod
-5. Tracks progress to allow resuming interrupted downloads
+2. If no list provided, works backwards from the configured starting mod ID
+3. Downloads each mod's first available ZIP file from NexusMods
+4. Extracts the ZIP and filters files by extension (keeps only allowed file types)
+5. Saves metadata about each mod and file
+6. Tracks progress to allow resuming interrupted downloads
 
 ## Configuration
 
@@ -67,16 +73,16 @@ The application uses `config.json` for configuration:
 ```json
 {
     "StartingModId": 21959,
-    "RateLimitDelayMs": 1000,
+    "RateLimitDelayMs": 100,
     "MaxConsecutiveErrors": 10,
-    "OutputDirectory": "",
+    "OutputDirectory": "downloaded_mods",
     "ProcessedModsFile": "processed_mods.json",
     "GameId": "cyberpunk2077",
     "DeleteOriginalZip": true,
     "AllowedModFileExtensions": [".zip"],
     "AllowedFileExtensions": [".reds", ".lua", ".json", ".tweak", ".txt", ".md", ".xl", ".wscript", ".xml", ".yaml"],
     "CollectFullMetadata": true,
-    "MaxModsToProcess": -1,
+    "MaxModsToProcess": 10,
     "MinHourlyCallsRemaining": 10,
     "MinDailyCallsRemaining": 50,
     "RateLimitWaitMinutes": 60
@@ -85,8 +91,9 @@ The application uses `config.json` for configuration:
 
 **Key Settings:**
 - `AllowedFileExtensions`: File types to keep after extraction
-- `RateLimitDelayMs`: Delay between API calls (milliseconds)
-- `MaxModsToProcess`: Limit for testing (-1 = unlimited)
+- `RateLimitDelayMs`: Delay between API calls (milliseconds, default: 100)
+- `MaxModsToProcess`: Limit for testing (10 = debug mode, -1 = unlimited)
+- `StartingModId`: Where to start if no list file is provided (works backwards)
 - `CollectFullMetadata`: Whether to collect detailed mod information
 
 ## File Structure
@@ -120,7 +127,7 @@ The `data/mod_ids.txt` file contains over 5,700 carefully curated Cyberpunk 2077
 ## API Rate Limiting
 
 The tool respects NexusMods API limits:
-- Configurable delay between requests (default: 1 second)
+- Configurable delay between requests (default: 100ms in current config)
 - Monitors hourly and daily rate limits
 - Automatically waits when limits are approached
 - Can resume processing after rate limit resets
