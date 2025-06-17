@@ -45,86 +45,8 @@ class Program
         var app = ConsoleAppFramework.ConsoleApp.Create();
         app.Add("", () => { });
         app.Add("dump", async (string? list = null, string? key = null, CancellationToken cancellationToken = default) => await DumpAsync(list, key));
-        app.Add("prepare", (string source, string target, string ? list = null) => Prepare(source, target, list));
 
         await app.RunAsync(args);
-    }
-
-    /// <summary>
-    /// Prepares a downloaded mod directory for uploading.
-    /// </summary>
-    private static void Prepare(string source, string target, string? list = null)
-    {
-        ColoredLogger.LogHeader("NexusMods Cyberpunk 2077 Mod Downloader - Preparation");
-        ColoredLogger.LogHeader("=======================================");
-
-        // get the source directory
-        if (!Directory.Exists(source))
-        {
-            ColoredLogger.LogError($"Source directory does not exist: {source}");
-            return;
-        }
-        ColoredLogger.LogInfo($"Source directory: {source}");
-
-        // get the target directory
-        if (string.IsNullOrWhiteSpace(target))
-        {
-            ColoredLogger.LogError("Target directory is required.");
-            return;
-        }
-        if (!Directory.Exists(target))
-        {
-            ColoredLogger.LogInfo($"Target directory does not exist, creating: {target}");
-            Directory.CreateDirectory(target);
-        }
-
-        // get list of mods from file if provided
-        List<int> modIds = new List<int>();
-        if (!string.IsNullOrWhiteSpace(list) && File.Exists(list))
-        {
-            ColoredLogger.LogInfo($"Loading mod IDs from file: {list}");
-            var modStringIds = File.ReadAllLines(list);
-            if (modStringIds.Length == 0)
-            {
-                ColoredLogger.LogWarning("No mod IDs found in the provided file. Using all mods in source directory.");
-            }
-            else
-            {
-                ColoredLogger.LogInfo($"Loaded {modStringIds.Length} mod IDs from file.");
-            }
-            // Convert to integers and filter out invalid IDs
-            modIds = modStringIds
-                .Select(id => int.TryParse(id.Trim(), out var parsedId) ? parsedId : -1)
-                .Where(id => id > 0)
-                .ToList();
-        }
-
-        // allowed file extensions
-        string[] allowedExtensions = [];
-
-        // go through each mod directory in the source and check that it contains a metadata.json` file
-        var modDirectories = Directory.GetDirectories(source);
-        if (modDirectories.Length == 0)
-        {
-            ColoredLogger.LogWarning("No mod directories found in the source directory.");
-            return;
-        }
-
-        ColoredLogger.LogInfo($"Found {modDirectories.Length} mod directories in the source directory.");
-
-        foreach (var modFolder in modDirectories)
-        {
-            var metadataPath = Path.Combine(modFolder, "metadata.json");
-            if (!File.Exists(metadataPath))
-            {
-                ColoredLogger.LogWarning($"No metadata.json found in {modFolder}, skipping...");
-                continue;
-            }
-
-            ColoredLogger.LogInfo($"Processing mod folder: {modFolder}");
-
-            // create 
-        }
     }
 
     /// <summary>

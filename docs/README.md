@@ -1,138 +1,139 @@
-# NexusDump - Cyberpunk 2077 Mod Downloader
+# NexusDump
 
-A C# console application that downloads and processes Cyberpunk 2077 mods from NexusMods using their API.
+A C# command-line tool for downloading and processing Cyberpunk 2077 mods from NexusMods. This tool downloads mods from a curated list, extracts and filters files automatically.
 
 ## Features
 
-- **Authentication**: Uses NexusMods API key for authentication
-- **Progressive Download**: Starts from mod ID 21959 and works backwards
-- **Resume Support**: Saves processed mods to avoid re-downloading
-- **Rate Limiting**: Respects API rate limits with 1-second delays between requests
-- **File Processing**:
-  - Downloads the first file of each mod
-  - Extracts ZIP files
-  - Removes large `.archive` files to save space
-  - Creates metadata files with mod information
-- **Error Handling**: Continues processing even if individual mods fail
+- **Automated Mod Downloading**: Downloads mods from NexusMods API using a curated list
+- **Smart File Filtering**: Only keeps specific file types (`.reds`, `.lua`, `.json`, `.tweak`, `.txt`, `.md`, `.xl`, `.wscript`, `.xml`, `.yaml`)
+- **API Rate Limiting**: Respects NexusMods API limits with configurable delays
+- **Resume Support**: Tracks processed mods to avoid re-downloading
+- **Metadata Collection**: Saves detailed mod information and file lists
+- **Batch Processing**: Can process thousands of mods from a predefined list
 
-## Setup
+## Quick Start
 
-1. **Get your NexusMods API Key**:
-   - Go to [NexusMods](https://www.nexusmods.com)
-   - Log into your account
-   - Go to your profile settings
-   - Generate an API key under the "API Keys" section
-
-2. **Configure API Key** (Optional but recommended):
-   - Create a file named `apikey.txt` in the project directory
-   - Paste your API key into this file (one line, no extra spaces)
-   - The application will automatically use this key
-   - If no file exists, you'll be prompted to enter the key manually
-
-3. **Build the project**:
-
-   ```powershell
+1. **Setup**:
+   ```bash
+   # Clone the repository
+   git clone <repository-url>
+   cd NexusDump
+   
+   # Build the project
    dotnet build
+   ```
+
+2. **Get NexusMods API Key**:
+   - Visit [NexusMods.com](https://www.nexusmods.com) and log in
+   - Go to your profile settings → API Keys
+   - Generate a new API key
+   - Copy `apikey.txt.example` to `apikey.txt` and paste your key
+
+3. **Download Mods**:
+   ```bash
+   # Download mods from the curated list
+   dotnet run -- dump --list data/mod_ids.txt
+   
+   # Or specify API key manually
+   dotnet run -- dump --list data/mod_ids.txt --key YOUR_API_KEY
    ```
 
 ## Usage
 
-1. **Run the application**:
+### Download Mods
 
-   ```powershell
-   dotnet run
-   ```
+Downloads mods from NexusMods using their API.
 
-2. **Enter your API key** when prompted
-
-3. **The application will**:
-   - Start downloading from mod ID 21959
-   - Create a `downloaded_mods` folder
-   - For each mod, create a subfolder named with the mod ID
-   - Extract the mod files (excluding .archive files)
-   - Create a `metadata.json` file with mod information
-   - Track processed mods in `processed_mods.json`
-
-## Output Structure
-
-```txt
-downloaded_mods/
-├── 21959/
-│   ├── extracted/          # Extracted mod files (no .archive files)
-│   └── metadata.json       # Mod metadata
-├── 21958/
-│   ├── extracted/
-│   └── metadata.json
-└── ...
-processed_mods.json         # List of processed mod IDs
+**Usage:**
+```bash
+dotnet run -- dump [options]
 ```
 
-## Metadata Format
+**Options:**
+- `--list <file>`: Path to file containing mod IDs (one per line)
+- `--key <api_key>`: NexusMods API key (optional if using `apikey.txt`)
 
-Each `metadata.json` contains:
-
-- Mod ID, name, summary, description
-- Author information
-- Version information
-- Download and endorsement counts
-- Tags
-- File information (name, version, size)
-
-## Rate Limiting
-
-The application includes a 1-second delay between API requests to respect NexusMods' rate limiting. This means processing will be slow but steady.
-
-## Error Handling
-
-- Skips mods that are not accessible or don't exist
-- Continues processing if individual downloads fail
-- Stops after 10 consecutive errors to prevent infinite loops
-- Saves progress regularly so you can resume if interrupted
-
-## Resume Functionality
-
-If the application is interrupted, simply run it again. It will:
-
-- Load the list of already processed mods from `processed_mods.json`
-- Skip mods that have already been processed
-- Continue from where it left off
+**What it does:**
+1. Reads mod IDs from the specified list file (`data/mod_ids.txt` contains 5,773+ curated mod IDs)
+2. Downloads each mod's ZIP file from NexusMods
+3. Extracts the ZIP and filters files by extension
+4. Saves metadata about each mod
+5. Tracks progress to allow resuming interrupted downloads
 
 ## Configuration
 
-You can customize the application behavior by editing `config.json`:
+The application uses `config.json` for configuration:
 
 ```json
 {
-    "StartingModId": 21959,           // Latest mod ID to start from
-    "RateLimitDelayMs": 1000,         // Delay between API calls in milliseconds
-    "MaxConsecutiveErrors": 10,       // Stop after this many consecutive errors
-    "OutputDirectory": "downloaded_mods", // Where to save downloaded mods
-    "ProcessedModsFile": "processed_mods.json", // Track processed mods
-    "GameId": "cyberpunk2077",        // NexusMods game identifier
-    "DeleteArchiveFiles": true,       // Remove large .archive files after extraction
-    "DeleteOriginalZip": true,        // Remove ZIP file after extraction
-    "MaxModsToProcess": 10            // Debug: limit number of mods (-1 = unlimited)
+    "StartingModId": 21959,
+    "RateLimitDelayMs": 1000,
+    "MaxConsecutiveErrors": 10,
+    "OutputDirectory": "",
+    "ProcessedModsFile": "processed_mods.json",
+    "GameId": "cyberpunk2077",
+    "DeleteOriginalZip": true,
+    "AllowedModFileExtensions": [".zip"],
+    "AllowedFileExtensions": [".reds", ".lua", ".json", ".tweak", ".txt", ".md", ".xl", ".wscript", ".xml", ".yaml"],
+    "CollectFullMetadata": true,
+    "MaxModsToProcess": -1,
+    "MinHourlyCallsRemaining": 10,
+    "MinDailyCallsRemaining": 50,
+    "RateLimitWaitMinutes": 60
 }
 ```
 
-**Debug Mode**: Set `MaxModsToProcess` to a positive number (e.g., 10) to process only that many mods for testing. Set to -1 for unlimited processing.
+**Key Settings:**
+- `AllowedFileExtensions`: File types to keep after extraction
+- `RateLimitDelayMs`: Delay between API calls (milliseconds)
+- `MaxModsToProcess`: Limit for testing (-1 = unlimited)
+- `CollectFullMetadata`: Whether to collect detailed mod information
 
-## Notes
+## File Structure
 
-- The application downloads only the first file of each mod
-- Large `.archive` files are automatically deleted to save disk space
-- All mod files are extracted from ZIP archives
-- The original ZIP files are deleted after extraction to save space
+After running the tool, you'll have:
 
-## Security
+```
+downloaded_mods/              # Downloaded and extracted mods
+├── 164/                     # Mod ID folder
+│   ├── metadata.json        # Mod metadata
+│   ├── SomeModFile/         # Subfolder named after the downloaded file
+│   │   └── <extracted files...>  # Actual mod files (filtered by extension)
+│   └── SomeModFile.json     # File metadata (same name as subfolder)
+├── 447/
+│   ├── metadata.json
+│   ├── AnotherMod/
+│   │   └── <extracted files...>
+│   └── AnotherMod.json
+└── ...
 
-- **API Key File**: The `apikey.txt` file is automatically excluded from version control via `.gitignore`
-- **Example File**: Use `apikey.txt.example` as a template - copy it to `apikey.txt` and add your real API key
-- **Manual Input**: If no `apikey.txt` file exists, you'll be prompted to enter the key manually each time
+mod_processing_status.json    # Detailed processing status and tracking
+```
+
+## Curated Mod List
+
+The `data/mod_ids.txt` file contains over 5,700 carefully curated Cyberpunk 2077 mod IDs. These mods were selected based on:
+- Compatibility with Cyberpunk 2077
+- Quality and popularity
+- Specific mod types (RedScript, TweakXL, etc.)
+
+## API Rate Limiting
+
+The tool respects NexusMods API limits:
+- Configurable delay between requests (default: 1 second)
+- Monitors hourly and daily rate limits
+- Automatically waits when limits are approached
+- Can resume processing after rate limit resets
+
+## Security Notes
+
+- **Never commit `apikey.txt`** - it's in `.gitignore` for safety
+- Use `apikey.txt.example` as a template
+- API keys are not logged or stored in output files
 
 ## Requirements
 
-- .NET 9.0
+- .NET 8.0 or later
 - Valid NexusMods account with API key
 - Internet connection
-- Sufficient disk space for mod files
+- Sufficient disk space (some mod collections can be several GB)
