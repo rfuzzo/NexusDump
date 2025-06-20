@@ -146,7 +146,7 @@ namespace NexusDump
             {
                 if (_hourlyRemaining.HasValue && _hourlyRemaining.Value <= Program.config.MinHourlyCallsRemaining)
                 {
-                    waitUntil = _hourlyReset ?? DateTime.UtcNow.AddHours(1);
+                    waitUntil = _hourlyReset ?? DateTime.UtcNow.AddMinutes(Program.config.RateLimitWaitMinutes);
                     waitType = "hourly";
                 }
                 else

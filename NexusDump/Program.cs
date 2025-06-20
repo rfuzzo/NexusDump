@@ -490,7 +490,7 @@ class Program
     {
         try
         {
-            var filePath = Path.Combine(config.OutputDirectory, "mod_processing_status.json");
+            var filePath = config.ProcessedModsFile;
             if (File.Exists(filePath))
             {
                 var json = File.ReadAllText(filePath);
@@ -511,8 +511,7 @@ class Program
         {
             tracker.LastUpdated = DateTime.UtcNow;
             var json = JsonSerializer.Serialize(tracker, new JsonSerializerOptions { WriteIndented = true });
-            var filePath = Path.Combine(config.OutputDirectory, "mod_processing_status.json");
-            File.WriteAllText(filePath, json);
+            File.WriteAllText(config.ProcessedModsFile, json);
         }
         catch (Exception ex)
         {
@@ -534,101 +533,5 @@ class Program
             ProcessedAt = DateTime.UtcNow,
             RetryCount = 0
         });
-    }
-
-    private static HashSet<int> LoadProcessedMods()
-    {
-        try
-        {
-            var filePath = Path.Combine(config.OutputDirectory, config.ProcessedModsFile);
-            if (File.Exists(filePath))
-            {
-                var json = File.ReadAllText(filePath);
-                var processedIds = JsonSerializer.Deserialize<int[]>(json);
-                return new HashSet<int>(processedIds ?? Array.Empty<int>());
-            }
-        }
-        catch (Exception ex)
-        {
-            ColoredLogger.LogError($"Error loading processed mods: {ex.Message}");
-        }
-
-        return new HashSet<int>();
-    }
-
-    private static void SaveProcessedMods(HashSet<int> processedMods)
-    {
-        try
-        {
-            var json = JsonSerializer.Serialize(processedMods.ToArray(), new JsonSerializerOptions { WriteIndented = true });
-            var filePath = Path.Combine(config.OutputDirectory, config.ProcessedModsFile);
-            File.WriteAllText(filePath, json);
-        }
-        catch (Exception ex)
-        {
-            ColoredLogger.LogError($"Error saving processed mods: {ex.Message}");
-        }
-    }
-
-    private static void RetryFailedMods(ModProcessingTracker tracker, int maxRetries = 3)
-    {
-        var failedMods = tracker.GetFailedMods()
-            .Where(m => m.RetryCount < maxRetries)
-            .OrderBy(m => m.ModId)
-            .ToList();
-
-        if (failedMods.Count == 0)
-        {
-            ColoredLogger.LogInfo("No failed mods available for retry");
-            return;
-        }
-
-        ColoredLogger.LogInfo($"Found {failedMods.Count} failed mods eligible for retry");
-
-        foreach (var failedMod in failedMods)
-        {
-            ColoredLogger.LogInfo($"Retrying mod {failedMod.ModId} (attempt #{failedMod.RetryCount + 1}, last failure: {failedMod.FailureReason})");
-
-            // Increment retry count
-            failedMod.RetryCount++;
-            failedMod.ProcessedAt = DateTime.UtcNow;
-
-            // Note: The actual retry logic would be integrated into the main processing loop
-            // For now, we just update the retry count and save the tracker
-        }
-
-        SaveModProcessingTracker(tracker);
-    }
-
-    private static void ShowModProcessingStats(ModProcessingTracker tracker)
-    {
-        var totalProcessed = tracker.ProcessedMods.Count;
-        var successful = tracker.ProcessedMods.Count(m => m.Result == ModProcessingResult.Success);
-        var failed = totalProcessed - successful;
-
-        ColoredLogger.LogHeader("Mod Processing Statistics");
-        ColoredLogger.LogHeader("========================");
-        ColoredLogger.LogInfo($"Total mods processed: {totalProcessed}");
-        ColoredLogger.LogSuccess($"Successful: {successful}");
-
-        if (failed > 0)
-        {
-            ColoredLogger.LogError($"Failed: {failed}");
-
-            var failureGroups = tracker.ProcessedMods
-                .Where(m => m.Result != ModProcessingResult.Success)
-                .GroupBy(m => m.Result)
-                .OrderByDescending(g => g.Count());
-
-            foreach (var group in failureGroups)
-            {
-                ColoredLogger.LogWarning($"  {group.Key}: {group.Count()}");
-            }
-        }
-
-        if (tracker.LastUpdated != default)
-        {
-            ColoredLogger.LogInfo($"Last updated: {tracker.LastUpdated:yyyy-MM-dd HH:mm:ss} UTC");
-        }
     }
 }
